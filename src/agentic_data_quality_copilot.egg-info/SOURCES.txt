@@ -1,0 +1,12 @@
+pyproject.toml
+src/agentic_data_quality_copilot.egg-info/PKG-INFO
+src/agentic_data_quality_copilot.egg-info/SOURCES.txt
+src/agentic_data_quality_copilot.egg-info/dependency_links.txt
+src/agentic_data_quality_copilot.egg-info/requires.txt
+src/agentic_data_quality_copilot.egg-info/top_level.txt
+src/dq_copilot/__init__.py
+src/dq_copilot/agent/__init__.py
+src/dq_copilot/checks/__init__.py
+src/dq_copilot/loaders/__init__.py
+src/dq_copilot/profiling/__init__.py
+src/dq_copilot/reporting/__init__.py

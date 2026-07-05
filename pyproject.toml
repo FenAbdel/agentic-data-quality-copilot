@@ -1,0 +1,22 @@
+[project]
+name = "agentic-data-quality-copilot"
+version = "0.1.0"
+description = "An agentic data quality copilot for profiling datasets, planning checks, executing deterministic tools, and generating data quality reports."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pandas",
+    "duckdb",
+    "pydantic",
+    "streamlit",
+    "python-dotenv"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest"
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

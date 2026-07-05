@@ -1,0 +1,13 @@
+Metadata-Version: 2.4
+Name: agentic-data-quality-copilot
+Version: 0.1.0
+Summary: An agentic data quality copilot for profiling datasets, planning checks, executing deterministic tools, and generating data quality reports.
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: pandas
+Requires-Dist: duckdb
+Requires-Dist: pydantic
+Requires-Dist: streamlit
+Requires-Dist: python-dotenv
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
