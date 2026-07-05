@@ -1,0 +1,6 @@
+customer_id,customer_name,email,age,signup_date,country
+1,Amina,amina@example.com,29,2024-01-15,France
+2,Karim,karim@example.com,34,2024-02-20,Morocco
+3,Sarah,,41,2024-03-05,France
+4,Youssef,youssef@example.com,,2024-03-18,Morocco
+5,Lina,lina@example.com,25,2024-04-01,Spain
