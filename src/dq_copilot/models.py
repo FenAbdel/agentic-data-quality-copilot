@@ -33,3 +33,21 @@ class MissingValuesCheckResult(BaseModel):
     columns_checked: int
     columns_with_missing_values: int
     results: list[ColumnMissingValueResult]
+
+
+class DuplicateGroupResult(BaseModel):
+    duplicate_key: dict[str, str]
+    duplicate_count: int
+
+
+class DuplicateCheckResult(BaseModel):
+    check_name: str = "duplicate_detection"
+    status: Literal["passed", "warning", "failed"]
+    scope: Literal["full_row", "key_columns"]
+    key_columns: list[str]
+    row_count: int
+    duplicate_row_count: int
+    duplicate_percentage: float
+    duplicate_group_count: int
+    severity: Literal["ok", "low", "medium", "high"]
+    duplicate_groups: list[DuplicateGroupResult] = Field(default_factory=list)
