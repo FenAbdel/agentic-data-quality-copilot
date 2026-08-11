@@ -87,3 +87,50 @@ class TypeValidationCheckResult(BaseModel):
     columns_with_invalid_values: int
     total_invalid_values: int
     results: list[ColumnTypeValidationResult]
+
+
+BusinessRuleType = Literal[
+    "not_null",
+    "range",
+    "positive",
+    "non_negative",
+    "allowed_values",
+    "not_future_date",
+]
+
+
+class BusinessRuleConfig(BaseModel):
+    rule_name: str
+    column_name: str
+    rule_type: BusinessRuleType
+    min_value: float | None = None
+    max_value: float | None = None
+    allowed_values: list[str] | None = None
+    allow_null: bool = True
+    description: str | None = None
+
+
+class BusinessRuleViolationExample(BaseModel):
+    row_index: str
+    value: str
+    message: str
+
+
+class BusinessRuleResult(BaseModel):
+    rule_name: str
+    column_name: str
+    rule_type: BusinessRuleType
+    status: Literal["passed", "failed"]
+    violation_count: int
+    violation_percentage: float
+    severity: Literal["ok", "low", "medium", "high"]
+    violation_examples: list[BusinessRuleViolationExample] = Field(default_factory=list)
+
+
+class BusinessRulesCheckResult(BaseModel):
+    check_name: str = "business_rules"
+    status: Literal["passed", "warning", "failed"]
+    rules_checked: int
+    rules_with_violations: int
+    total_violations: int
+    results: list[BusinessRuleResult]
