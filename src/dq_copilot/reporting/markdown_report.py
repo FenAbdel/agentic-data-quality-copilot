@@ -269,6 +269,75 @@ def _build_business_rules_section(result: DataQualityRunResult) -> list[str]:
     lines.append("")
     return lines
 
+def _build_sql_analysis_section(result: DataQualityRunResult) -> list[str]:
+    if result.sql_analysis is None:
+        return [
+            "## DuckDB SQL analysis",
+            "",
+            "⏭️ DuckDB SQL analysis was skipped because no SQL queries were configured.",
+            "",
+        ]
+
+    sql_analysis = result.sql_analysis
+
+    lines = [
+        "## DuckDB SQL analysis",
+        "",
+        f"**Status:** {_status_icon(sql_analysis.status)} `{sql_analysis.status}`",
+        "",
+        f"- **Queries executed:** {sql_analysis.queries_executed}",
+        f"- **Queries failed:** {sql_analysis.queries_failed}",
+        "",
+    ]
+
+    for query_result in sql_analysis.results:
+        lines.extend(
+            [
+                f"### Query: `{query_result.query_name}`",
+                "",
+                "```sql",
+                query_result.sql.strip(),
+                "```",
+                "",
+                f"**Status:** {_status_icon(query_result.status)} `{query_result.status}`",
+                "",
+            ]
+        )
+
+        if query_result.status == "failed":
+            lines.extend(
+                [
+                    f"**Error:** {query_result.error_message}",
+                    "",
+                ]
+            )
+            continue
+
+        lines.extend(
+            [
+                f"**Rows returned:** {query_result.row_count}",
+                "",
+            ]
+        )
+
+        if query_result.rows:
+            header = "| " + " | ".join(query_result.columns) + " |"
+            separator = "| " + " | ".join(["---"] * len(query_result.columns)) + " |"
+
+            lines.append(header)
+            lines.append(separator)
+
+            for row in query_result.rows:
+                lines.append(
+                    "| "
+                    + " | ".join(row.get(column, "") for column in query_result.columns)
+                    + " |"
+                )
+
+            lines.append("")
+
+    return lines
+
 def _build_bi_readiness_section(result: DataQualityRunResult) -> list[str]:
     if result.bi_readiness_score is None:
         return [
@@ -379,6 +448,7 @@ def generate_markdown_report(result: DataQualityRunResult) -> str:
     lines.extend(_build_duplicates_section(result))
     lines.extend(_build_type_validation_section(result))
     lines.extend(_build_business_rules_section(result))
+    lines.extend(_build_sql_analysis_section(result))
     lines.extend(_build_bi_readiness_section(result))
     lines.extend(_build_action_log_section(result))
     lines.extend(_build_recommendations_section(result))

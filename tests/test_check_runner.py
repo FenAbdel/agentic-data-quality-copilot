@@ -6,6 +6,7 @@ from dq_copilot.agent.check_runner import run_data_quality_checks
 from dq_copilot.loaders.csv_loader import load_csv
 from dq_copilot.models import BusinessRuleConfig, DataQualityRunConfig
 
+from dq_copilot.models import SQLAnalysisQuery
 
 SAMPLE_CSV_PATH = Path("data/samples/customers.csv")
 
@@ -33,7 +34,12 @@ def test_check_runner_runs_core_checks():
     assert result.type_validation is None
     assert result.business_rules is None
 
-    assert len(result.action_log) == 5
+    assert len(result.action_log) == 6
+
+    assert result.sql_analysis is None
+
+    assert result.action_log[5].step_name == "duckdb_sql_analysis"
+    assert result.action_log[5].status == "skipped"
     assert result.action_log[0].step_name == "schema_profile"
     assert result.action_log[0].status == "completed"
 
@@ -140,3 +146,41 @@ def test_check_runner_supports_duplicate_key_columns():
     assert result.duplicates.scope == "key_columns"
     assert result.duplicates.key_columns == ["customer_id"]
     assert result.duplicates.duplicate_row_count == 2
+
+def test_check_runner_runs_duckdb_sql_analysis_when_queries_are_provided():
+    dataframe = pd.DataFrame(
+        {
+            "customer_id": [1, 2, 3],
+            "country": ["France", "Morocco", "France"],
+        }
+    )
+
+    config = DataQualityRunConfig(
+        dataset_name="customers.csv",
+        sql_queries=[
+            SQLAnalysisQuery(
+                query_name="rows_by_country",
+                sql="""
+                SELECT country, COUNT(*) AS row_count
+                FROM dataset
+                GROUP BY country
+                ORDER BY row_count DESC
+                """,
+            )
+        ],
+    )
+
+    result = run_data_quality_checks(
+        dataframe=dataframe,
+        config=config,
+    )
+
+    assert result.sql_analysis is not None
+    assert result.sql_analysis.status == "passed"
+    assert result.sql_analysis.queries_executed == 1
+    assert result.sql_analysis.queries_failed == 0
+    assert result.sql_analysis.results[0].rows[0]["country"] == "France"
+
+    log_by_step = {log.step_name: log for log in result.action_log}
+
+    assert log_by_step["duckdb_sql_analysis"].status == "completed"    

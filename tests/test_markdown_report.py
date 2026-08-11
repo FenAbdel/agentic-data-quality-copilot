@@ -43,7 +43,7 @@ def test_generate_markdown_report_contains_main_sections():
 
     result = run_data_quality_checks(dataframe, config)
     report = generate_markdown_report(result)
-
+    assert "## DuckDB SQL analysis" in report
     assert "# Data Quality Report — customers.csv" in report
     assert "## Dataset overview" in report
     assert "## Schema summary" in report
@@ -66,7 +66,7 @@ def test_generate_markdown_report_contains_key_metrics():
 
     result = run_data_quality_checks(dataframe, config)
     report = generate_markdown_report(result)
-
+    assert "DuckDB SQL analysis was skipped" in report
     assert "**Rows:** 5" in report
     assert "**Columns:** 6" in report
     assert "**Total missing values:** 2" in report

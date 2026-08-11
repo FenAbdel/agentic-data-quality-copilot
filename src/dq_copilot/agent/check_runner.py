@@ -11,6 +11,7 @@ from dq_copilot.models import (
 )
 from dq_copilot.profiling.schema_profiler import profile_schema
 from dq_copilot.scoring.bi_readiness import compute_bi_readiness_score
+from dq_copilot.sql.duckdb_analyzer import run_duckdb_analysis
 
 def _log_completed(step_name: str, message: str) -> CheckExecutionLog:
     return CheckExecutionLog(
@@ -153,6 +154,31 @@ def run_data_quality_checks(
             )
         )
 
+    sql_analysis = None
+
+    if config.sql_queries:
+        sql_analysis = run_duckdb_analysis(
+            dataframe=dataframe,
+            queries=config.sql_queries,
+            table_name="dataset",
+        )
+        action_log.append(
+            _log_completed(
+                step_name="duckdb_sql_analysis",
+                message=(
+                    f"Executed {sql_analysis.queries_executed} DuckDB SQL queries "
+                    f"with {sql_analysis.queries_failed} failures."
+                ),
+            )
+        )
+    else:
+        action_log.append(
+            _log_skipped(
+                step_name="duckdb_sql_analysis",
+                message="Skipped DuckDB SQL analysis because no SQL queries were configured.",
+            )
+        )
+
     run_result = DataQualityRunResult(
         dataset_name=config.dataset_name,
         schema_profile=schema_profile,
@@ -160,6 +186,7 @@ def run_data_quality_checks(
         duplicates=duplicates,
         type_validation=type_validation,
         business_rules=business_rules,
+        sql_analysis=sql_analysis,
         action_log=action_log,
     )
 

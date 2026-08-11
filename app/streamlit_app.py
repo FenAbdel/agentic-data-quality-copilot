@@ -8,7 +8,7 @@ import streamlit as st
 from dq_copilot.agent.check_runner import run_data_quality_checks
 from dq_copilot.models import BusinessRuleConfig, DataQualityRunConfig
 from dq_copilot.reporting.markdown_report import generate_markdown_report
-
+from dq_copilot.models import BusinessRuleConfig, DataQualityRunConfig, SQLAnalysisQuery
 
 st.set_page_config(
     page_title="Agentic Data Quality Copilot",
@@ -192,7 +192,59 @@ def build_business_rules_from_ui(dataframe: pd.DataFrame) -> list[BusinessRuleCo
 
     return rules
 
+def build_sql_queries_from_ui() -> list[SQLAnalysisQuery]:
+    st.subheader("DuckDB SQL analysis")
 
+    with st.expander("Configure SQL queries", expanded=False):
+        st.caption(
+            "Write read-only DuckDB SQL queries against the uploaded dataset. "
+            "Use the table name `dataset`."
+        )
+
+        query_name = st.text_input(
+            "Query name",
+            value="rows_by_country",
+            key="sql_query_name",
+        )
+
+        sql = st.text_area(
+            "SQL query",
+            value=(
+                "SELECT country, COUNT(*) AS row_count\n"
+                "FROM dataset\n"
+                "GROUP BY country\n"
+                "ORDER BY row_count DESC"
+            ),
+            height=160,
+            key="sql_query_text",
+        )
+
+        if "sql_queries" not in st.session_state:
+            st.session_state.sql_queries = []
+
+        if st.button("Add SQL query"):
+            try:
+                query = SQLAnalysisQuery(
+                    query_name=query_name,
+                    sql=sql,
+                )
+                st.session_state.sql_queries.append(query)
+                st.success(f"Added SQL query: {query.query_name}")
+            except Exception as error:
+                st.error(f"Could not add SQL query: {error}")
+
+        if st.session_state.sql_queries:
+            st.write("Configured SQL queries:")
+
+            for index, query in enumerate(st.session_state.sql_queries, start=1):
+                st.write(f"{index}. `{query.query_name}`")
+
+            if st.button("Clear SQL queries"):
+                st.session_state.sql_queries = []
+                st.rerun()
+
+        return st.session_state.sql_queries
+    
 def display_schema_summary(result) -> None:
     st.subheader("Schema summary")
 
@@ -209,7 +261,6 @@ def display_schema_summary(result) -> None:
     ]
 
     st.dataframe(schema_rows, use_container_width=True)
-
 
 def display_missing_values(result) -> None:
     st.subheader("Missing values")
@@ -363,6 +414,30 @@ def display_bi_readiness_score(result) -> None:
     for recommendation in score.recommendations:
         st.write(f"- {recommendation}")
 
+def display_sql_analysis(result) -> None:
+    st.subheader("DuckDB SQL analysis")
+
+    if result.sql_analysis is None:
+        st.info("DuckDB SQL analysis was skipped because no SQL queries were configured.")
+        return
+
+    sql_analysis = result.sql_analysis
+
+    col1, col2 = st.columns(2)
+    col1.metric("Status", sql_analysis.status)
+    col2.metric("Queries failed", sql_analysis.queries_failed)
+
+    for query_result in sql_analysis.results:
+        st.markdown(f"### `{query_result.query_name}`")
+        st.code(query_result.sql, language="sql")
+
+        if query_result.status == "failed":
+            st.error(query_result.error_message)
+            continue
+
+        st.write(f"Rows returned: `{query_result.row_count}`")
+        st.dataframe(query_result.rows, use_container_width=True)
+        
 def main() -> None:
     st.title("🧪 Agentic Data Quality Copilot")
 
@@ -409,7 +484,7 @@ def main() -> None:
 
     expected_schema = build_expected_schema_from_ui(dataframe)
     business_rules = build_business_rules_from_ui(dataframe)
-
+    sql_queries = build_sql_queries_from_ui()
     st.divider()
 
     run_checks = st.button("Run data quality checks", type="primary")
@@ -422,8 +497,8 @@ def main() -> None:
         duplicate_key_columns=duplicate_key_columns or None,
         expected_schema=expected_schema or None,
         business_rules=business_rules,
+        sql_queries=sql_queries,
     )
-
     try:
         result = run_data_quality_checks(
             dataframe=dataframe,
@@ -442,14 +517,15 @@ def main() -> None:
     overview_col2.metric("Columns", result.schema_profile.column_count)
     overview_col3.metric("Missing values", result.missing_values.total_missing_values)
 
-    tab_schema, tab_missing, tab_duplicates, tab_types, tab_rules, tab_score, tab_log, tab_report = st.tabs(
+    tab_schema, tab_missing, tab_duplicates, tab_types, tab_rules, tab_sql, tab_score, tab_log, tab_report = st.tabs(
         [
             "Schema",
             "Missing values",
             "Duplicates",
             "Type validation",
             "Business rules",
-            "BI-readiness score",
+            "SQL analysis",
+            "BI-readiness",
             "Action log",
             "Markdown report",
         ]
@@ -472,10 +548,11 @@ def main() -> None:
 
     with tab_score:
         display_bi_readiness_score(result)
-        
+
     with tab_log:
         display_action_log(result)
-
+    with tab_sql:
+        display_sql_analysis(result)
     with tab_report:
         st.markdown(report)
 

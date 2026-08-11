@@ -141,28 +141,6 @@ class CheckExecutionLog(BaseModel):
     message: str
 
 
-class DataQualityRunConfig(BaseModel):
-    dataset_name: str = "dataset"
-    duplicate_key_columns: list[str] | None = None
-    expected_schema: dict[str, ExpectedDataType] | None = None
-    business_rules: list[BusinessRuleConfig] = Field(default_factory=list)
-
-
-class DataQualityRunResult(BaseModel):
-    dataset_name: str
-    schema_profile: DatasetSchemaProfile
-    missing_values: MissingValuesCheckResult
-    duplicates: DuplicateCheckResult
-    type_validation: TypeValidationCheckResult | None = None
-    business_rules: BusinessRulesCheckResult | None = None
-    action_log: list[CheckExecutionLog] = Field(default_factory=list)
-
-class CheckExecutionLog(BaseModel):
-    step_name: str
-    status: Literal["completed", "skipped"]
-    message: str
-
-
 class BIReadinessScoreComponent(BaseModel):
     component_name: str
     score: int
@@ -180,11 +158,36 @@ class BIReadinessScoreResult(BaseModel):
     recommendations: list[str] = Field(default_factory=list)
 
 
+class SQLAnalysisQuery(BaseModel):
+    query_name: str
+    sql: str
+    description: str | None = None
+
+
+class SQLAnalysisQueryResult(BaseModel):
+    query_name: str
+    sql: str
+    status: Literal["passed", "failed"]
+    row_count: int = 0
+    columns: list[str] = Field(default_factory=list)
+    rows: list[dict[str, str]] = Field(default_factory=list)
+    error_message: str | None = None
+
+
+class SQLAnalysisRunResult(BaseModel):
+    check_name: str = "duckdb_sql_analysis"
+    status: Literal["passed", "warning", "failed"]
+    queries_executed: int
+    queries_failed: int
+    results: list[SQLAnalysisQueryResult]
+
+
 class DataQualityRunConfig(BaseModel):
     dataset_name: str = "dataset"
     duplicate_key_columns: list[str] | None = None
     expected_schema: dict[str, ExpectedDataType] | None = None
     business_rules: list[BusinessRuleConfig] = Field(default_factory=list)
+    sql_queries: list[SQLAnalysisQuery] = Field(default_factory=list)
 
 
 class DataQualityRunResult(BaseModel):
@@ -194,5 +197,6 @@ class DataQualityRunResult(BaseModel):
     duplicates: DuplicateCheckResult
     type_validation: TypeValidationCheckResult | None = None
     business_rules: BusinessRulesCheckResult | None = None
+    sql_analysis: SQLAnalysisRunResult | None = None
     bi_readiness_score: BIReadinessScoreResult | None = None
     action_log: list[CheckExecutionLog] = Field(default_factory=list)
