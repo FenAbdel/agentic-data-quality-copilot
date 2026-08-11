@@ -134,3 +134,25 @@ class BusinessRulesCheckResult(BaseModel):
     rules_with_violations: int
     total_violations: int
     results: list[BusinessRuleResult]
+
+class CheckExecutionLog(BaseModel):
+    step_name: str
+    status: Literal["completed", "skipped"]
+    message: str
+
+
+class DataQualityRunConfig(BaseModel):
+    dataset_name: str = "dataset"
+    duplicate_key_columns: list[str] | None = None
+    expected_schema: dict[str, ExpectedDataType] | None = None
+    business_rules: list[BusinessRuleConfig] = Field(default_factory=list)
+
+
+class DataQualityRunResult(BaseModel):
+    dataset_name: str
+    schema_profile: DatasetSchemaProfile
+    missing_values: MissingValuesCheckResult
+    duplicates: DuplicateCheckResult
+    type_validation: TypeValidationCheckResult | None = None
+    business_rules: BusinessRulesCheckResult | None = None
+    action_log: list[CheckExecutionLog] = Field(default_factory=list)
