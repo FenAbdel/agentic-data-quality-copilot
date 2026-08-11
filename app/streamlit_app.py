@@ -332,6 +332,36 @@ def display_action_log(result) -> None:
 
     st.dataframe(rows, use_container_width=True)
 
+def display_bi_readiness_score(result) -> None:
+    st.subheader("BI-readiness score")
+
+    if result.bi_readiness_score is None:
+        st.info("BI-readiness score was not computed.")
+        return
+
+    score = result.bi_readiness_score
+
+    col1, col2 = st.columns(2)
+    col1.metric("BI-readiness score", f"{score.overall_score}/{score.max_score}")
+    col2.metric("Rating", score.rating)
+
+    st.write(score.summary)
+
+    rows = [
+        {
+            "Component": component.component_name,
+            "Score": f"{component.score}/{component.max_score}",
+            "Status": component.status,
+            "Explanation": component.explanation,
+        }
+        for component in score.breakdown
+    ]
+
+    st.dataframe(rows, use_container_width=True)
+
+    st.write("Recommendations:")
+    for recommendation in score.recommendations:
+        st.write(f"- {recommendation}")
 
 def main() -> None:
     st.title("🧪 Agentic Data Quality Copilot")
@@ -412,13 +442,14 @@ def main() -> None:
     overview_col2.metric("Columns", result.schema_profile.column_count)
     overview_col3.metric("Missing values", result.missing_values.total_missing_values)
 
-    tab_schema, tab_missing, tab_duplicates, tab_types, tab_rules, tab_log, tab_report = st.tabs(
+    tab_schema, tab_missing, tab_duplicates, tab_types, tab_rules, tab_score, tab_log, tab_report = st.tabs(
         [
             "Schema",
             "Missing values",
             "Duplicates",
             "Type validation",
             "Business rules",
+            "BI-readiness score",
             "Action log",
             "Markdown report",
         ]
@@ -439,6 +470,9 @@ def main() -> None:
     with tab_rules:
         display_business_rules(result)
 
+    with tab_score:
+        display_bi_readiness_score(result)
+        
     with tab_log:
         display_action_log(result)
 

@@ -156,3 +156,43 @@ class DataQualityRunResult(BaseModel):
     type_validation: TypeValidationCheckResult | None = None
     business_rules: BusinessRulesCheckResult | None = None
     action_log: list[CheckExecutionLog] = Field(default_factory=list)
+
+class CheckExecutionLog(BaseModel):
+    step_name: str
+    status: Literal["completed", "skipped"]
+    message: str
+
+
+class BIReadinessScoreComponent(BaseModel):
+    component_name: str
+    score: int
+    max_score: int
+    status: Literal["strong", "acceptable", "weak", "skipped"]
+    explanation: str
+
+
+class BIReadinessScoreResult(BaseModel):
+    overall_score: int
+    max_score: int = 100
+    rating: Literal["excellent", "good", "needs_attention", "poor"]
+    summary: str
+    breakdown: list[BIReadinessScoreComponent]
+    recommendations: list[str] = Field(default_factory=list)
+
+
+class DataQualityRunConfig(BaseModel):
+    dataset_name: str = "dataset"
+    duplicate_key_columns: list[str] | None = None
+    expected_schema: dict[str, ExpectedDataType] | None = None
+    business_rules: list[BusinessRuleConfig] = Field(default_factory=list)
+
+
+class DataQualityRunResult(BaseModel):
+    dataset_name: str
+    schema_profile: DatasetSchemaProfile
+    missing_values: MissingValuesCheckResult
+    duplicates: DuplicateCheckResult
+    type_validation: TypeValidationCheckResult | None = None
+    business_rules: BusinessRulesCheckResult | None = None
+    bi_readiness_score: BIReadinessScoreResult | None = None
+    action_log: list[CheckExecutionLog] = Field(default_factory=list)

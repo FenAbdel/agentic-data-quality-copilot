@@ -10,7 +10,7 @@ from dq_copilot.models import (
     DataQualityRunResult,
 )
 from dq_copilot.profiling.schema_profiler import profile_schema
-
+from dq_copilot.scoring.bi_readiness import compute_bi_readiness_score
 
 def _log_completed(step_name: str, message: str) -> CheckExecutionLog:
     return CheckExecutionLog(
@@ -153,7 +153,7 @@ def run_data_quality_checks(
             )
         )
 
-    return DataQualityRunResult(
+    run_result = DataQualityRunResult(
         dataset_name=config.dataset_name,
         schema_profile=schema_profile,
         missing_values=missing_values,
@@ -162,3 +162,18 @@ def run_data_quality_checks(
         business_rules=business_rules,
         action_log=action_log,
     )
+
+    run_result.bi_readiness_score = compute_bi_readiness_score(run_result)
+
+    action_log.append(
+        _log_completed(
+            step_name="bi_readiness_score",
+            message=(
+                f"Computed BI-readiness score: "
+                f"{run_result.bi_readiness_score.overall_score}/100 "
+                f"({run_result.bi_readiness_score.rating})."
+            ),
+        )
+    )
+
+    return run_result

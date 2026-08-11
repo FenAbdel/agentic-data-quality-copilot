@@ -51,6 +51,7 @@ def test_generate_markdown_report_contains_main_sections():
     assert "## Duplicate detection" in report
     assert "## Type validation" in report
     assert "## Business-rule checks" in report
+    assert "## BI-readiness score" in report
     assert "## Action log" in report
     assert "## Recommendations" in report
 
@@ -72,6 +73,8 @@ def test_generate_markdown_report_contains_key_metrics():
     assert "**Duplicated rows:** 0" in report
     assert "Type validation was skipped" in report
     assert "Business-rule checks were skipped" in report
+    assert "**Overall score:**" in report
+    assert "**Rating:**" in report
 
 
 def test_generate_markdown_report_includes_recommendations_for_issues():

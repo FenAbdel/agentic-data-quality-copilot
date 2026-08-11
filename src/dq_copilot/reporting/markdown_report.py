@@ -269,6 +269,40 @@ def _build_business_rules_section(result: DataQualityRunResult) -> list[str]:
     lines.append("")
     return lines
 
+def _build_bi_readiness_section(result: DataQualityRunResult) -> list[str]:
+    if result.bi_readiness_score is None:
+        return [
+            "## BI-readiness score",
+            "",
+            "BI-readiness score was not computed.",
+            "",
+        ]
+
+    score = result.bi_readiness_score
+
+    lines = [
+        "## BI-readiness score",
+        "",
+        f"**Overall score:** {score.overall_score}/{score.max_score}",
+        f"**Rating:** `{score.rating}`",
+        "",
+        score.summary,
+        "",
+        "| Component | Score | Status | Explanation |",
+        "|---|---:|---|---|",
+    ]
+
+    for component in score.breakdown:
+        lines.append(
+            "| "
+            f"{component.component_name} | "
+            f"{component.score}/{component.max_score} | "
+            f"{component.status} | "
+            f"{component.explanation} |"
+        )
+
+    lines.append("")
+    return lines
 
 def _build_action_log_section(result: DataQualityRunResult) -> list[str]:
     lines = [
@@ -345,6 +379,7 @@ def generate_markdown_report(result: DataQualityRunResult) -> str:
     lines.extend(_build_duplicates_section(result))
     lines.extend(_build_type_validation_section(result))
     lines.extend(_build_business_rules_section(result))
+    lines.extend(_build_bi_readiness_section(result))
     lines.extend(_build_action_log_section(result))
     lines.extend(_build_recommendations_section(result))
 
