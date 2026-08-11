@@ -1,8 +1,0 @@
-pandas
-duckdb
-pydantic
-streamlit
-python-dotenv
-
-[dev]
-pytest
