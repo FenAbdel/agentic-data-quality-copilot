@@ -51,3 +51,39 @@ class DuplicateCheckResult(BaseModel):
     duplicate_group_count: int
     severity: Literal["ok", "low", "medium", "high"]
     duplicate_groups: list[DuplicateGroupResult] = Field(default_factory=list)
+
+
+ExpectedDataType = Literal[
+    "integer",
+    "float",
+    "numeric",
+    "date",
+    "string",
+    "boolean",
+]
+
+
+class InvalidTypeValueExample(BaseModel):
+    row_index: str
+    value: str
+    expected_type: ExpectedDataType
+
+
+class ColumnTypeValidationResult(BaseModel):
+    column_name: str
+    expected_type: ExpectedDataType
+    pandas_dtype: str
+    non_null_count: int
+    invalid_count: int
+    invalid_percentage: float
+    severity: Literal["ok", "low", "medium", "high"]
+    invalid_examples: list[InvalidTypeValueExample] = Field(default_factory=list)
+
+
+class TypeValidationCheckResult(BaseModel):
+    check_name: str = "type_validation"
+    status: Literal["passed", "warning", "failed"]
+    columns_checked: int
+    columns_with_invalid_values: int
+    total_invalid_values: int
+    results: list[ColumnTypeValidationResult]
