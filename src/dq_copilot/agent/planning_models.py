@@ -2,6 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from dq_copilot.models import DataQualityRunConfig
+
 
 AgentToolName = Literal[
     "profile_schema",
@@ -34,3 +36,12 @@ class AgentPlan(BaseModel):
     steps: list[AgentPlanStep]
     assumptions: list[str] = Field(default_factory=list)
     risks: list[str] = Field(default_factory=list)
+
+
+class AgentPlanningResult(BaseModel):
+    planner_type: Literal["deterministic_rules"] = "deterministic_rules"
+    user_goal: str
+    dataset_name: str
+    plan: AgentPlan
+    run_config: DataQualityRunConfig
+    planning_notes: list[str] = Field(default_factory=list)
