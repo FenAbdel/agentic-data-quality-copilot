@@ -28,6 +28,10 @@ def test_copilot_analysis_returns_plan_result_and_report():
 
     assert "# Data Quality Report — customers.csv" in result.markdown_report
 
+    assert result.verification_result is not None
+    assert result.observations
+    assert "## Result verification" in result.markdown_report
+
 
 def test_copilot_analysis_creates_deterministic_plan():
     dataframe = load_csv(SAMPLE_CSV_PATH)
@@ -90,3 +94,5 @@ def test_copilot_analysis_execution_summary_is_human_readable():
     assert "Copilot analyzed dataset" in result.execution_summary
     assert "customers.csv" in result.execution_summary
     assert "BI-readiness score" in result.execution_summary
+    assert "verified the results" in result.execution_summary
+    assert "Result verification status" in result.execution_summary

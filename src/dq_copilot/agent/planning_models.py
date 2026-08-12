@@ -2,7 +2,11 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from dq_copilot.models import DataQualityRunConfig, DataQualityRunResult
+from dq_copilot.models import (
+    DataQualityRunConfig,
+    DataQualityRunResult,
+    VerificationRunResult,
+)
 
 
 AgentToolName = Literal[
@@ -38,13 +42,22 @@ class AgentPlan(BaseModel):
     risks: list[str] = Field(default_factory=list)
 
 
+PlannerType = Literal["deterministic_rules", "llm"]
+
+
 class AgentPlanningResult(BaseModel):
-    planner_type: Literal["deterministic_rules"] = "deterministic_rules"
+    planner_type: PlannerType = "deterministic_rules"
     user_goal: str
     dataset_name: str
     plan: AgentPlan
     run_config: DataQualityRunConfig
     planning_notes: list[str] = Field(default_factory=list)
+
+
+class CopilotObservation(BaseModel):
+    source: str
+    severity: Literal["info", "warning", "critical"]
+    message: str
 
 
 class CopilotAnalysisResult(BaseModel):
@@ -54,3 +67,5 @@ class CopilotAnalysisResult(BaseModel):
     data_quality_result: DataQualityRunResult
     markdown_report: str
     execution_summary: str
+    observations: list[CopilotObservation] = Field(default_factory=list)
+    verification_result: VerificationRunResult | None = None

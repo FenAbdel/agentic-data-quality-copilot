@@ -9,7 +9,8 @@ dependencies = [
     "duckdb",
     "pydantic",
     "streamlit",
-    "python-dotenv"
+    "python-dotenv",
+    "openai"
 ]
 
 [project.optional-dependencies]

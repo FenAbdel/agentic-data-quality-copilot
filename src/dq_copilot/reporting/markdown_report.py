@@ -373,6 +373,42 @@ def _build_bi_readiness_section(result: DataQualityRunResult) -> list[str]:
     lines.append("")
     return lines
 
+def _build_verification_section(result: DataQualityRunResult) -> list[str]:
+    if result.verification_result is None:
+        return [
+            "## Result verification",
+            "",
+            "Result verification was not executed.",
+            "",
+        ]
+
+    verification = result.verification_result
+
+    lines = [
+        "## Result verification",
+        "",
+        f"**Status:** {_status_icon(verification.status)} `{verification.status}`",
+        "",
+        f"- **Checks run:** {verification.checks_run}",
+        f"- **Checks failed:** {verification.checks_failed}",
+        f"- **Checks with warnings:** {verification.checks_warning}",
+        "",
+        "| Check | Status | Message |",
+        "|---|---|---|",
+    ]
+
+    for check in verification.results:
+        lines.append(
+            "| "
+            f"{check.check_name} | "
+            f"{_status_icon(check.status)} {check.status} | "
+            f"{check.message} |"
+        )
+
+    lines.append("")
+    return lines
+
+
 def _build_action_log_section(result: DataQualityRunResult) -> list[str]:
     lines = [
         "## Action log",
@@ -450,6 +486,7 @@ def generate_markdown_report(result: DataQualityRunResult) -> str:
     lines.extend(_build_business_rules_section(result))
     lines.extend(_build_sql_analysis_section(result))
     lines.extend(_build_bi_readiness_section(result))
+    lines.extend(_build_verification_section(result))
     lines.extend(_build_action_log_section(result))
     lines.extend(_build_recommendations_section(result))
 

@@ -182,6 +182,21 @@ class SQLAnalysisRunResult(BaseModel):
     results: list[SQLAnalysisQueryResult]
 
 
+class VerificationCheckResult(BaseModel):
+    check_name: str
+    status: Literal["passed", "warning", "failed"]
+    message: str
+
+
+class VerificationRunResult(BaseModel):
+    check_name: str = "result_verification"
+    status: Literal["passed", "warning", "failed"]
+    checks_run: int
+    checks_failed: int
+    checks_warning: int
+    results: list[VerificationCheckResult] = Field(default_factory=list)
+
+
 class DataQualityRunConfig(BaseModel):
     dataset_name: str = "dataset"
     duplicate_key_columns: list[str] | None = None
@@ -199,4 +214,5 @@ class DataQualityRunResult(BaseModel):
     business_rules: BusinessRulesCheckResult | None = None
     sql_analysis: SQLAnalysisRunResult | None = None
     bi_readiness_score: BIReadinessScoreResult | None = None
+    verification_result: VerificationRunResult | None = None
     action_log: list[CheckExecutionLog] = Field(default_factory=list)

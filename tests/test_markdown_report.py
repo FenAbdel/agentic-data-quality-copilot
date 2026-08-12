@@ -52,6 +52,7 @@ def test_generate_markdown_report_contains_main_sections():
     assert "## Type validation" in report
     assert "## Business-rule checks" in report
     assert "## BI-readiness score" in report
+    assert "## Result verification" in report
     assert "## Action log" in report
     assert "## Recommendations" in report
 

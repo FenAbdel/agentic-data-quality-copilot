@@ -9,6 +9,7 @@ from dq_copilot.agent.check_runner import run_data_quality_checks
 from dq_copilot.models import BusinessRuleConfig, DataQualityRunConfig
 from dq_copilot.reporting.markdown_report import generate_markdown_report
 from dq_copilot.models import BusinessRuleConfig, DataQualityRunConfig, SQLAnalysisQuery
+from dq_copilot.agent.copilot import run_copilot_analysis
 
 st.set_page_config(
     page_title="Agentic Data Quality Copilot",
@@ -438,6 +439,147 @@ def display_sql_analysis(result) -> None:
         st.write(f"Rows returned: `{query_result.row_count}`")
         st.dataframe(query_result.rows, use_container_width=True)
         
+def display_agent_plan(planning_result) -> None:
+    st.subheader("Agent plan")
+
+    st.write(planning_result.plan.planning_summary)
+
+    if planning_result.planning_notes:
+        st.write("Planning notes:")
+        for note in planning_result.planning_notes:
+            st.write(f"- {note}")
+
+    plan_rows = [
+        {
+            "Step": step.step_id,
+            "Tool": step.tool_name,
+            "Objective": step.objective,
+            "Rationale": step.rationale,
+            "Optional": step.is_optional,
+            "Depends on": step.depends_on,
+        }
+        for step in planning_result.plan.steps
+    ]
+
+    st.dataframe(plan_rows, use_container_width=True)
+
+    with st.expander("Assumptions and risks", expanded=False):
+        st.write("Assumptions:")
+        for assumption in planning_result.plan.assumptions:
+            st.write(f"- {assumption}")
+
+        st.write("Risks:")
+        for risk in planning_result.plan.risks:
+            st.write(f"- {risk}")
+
+def display_observations(copilot_result) -> None:
+    st.subheader("Copilot observations")
+
+    rows = [
+        {
+            "Source": observation.source,
+            "Severity": observation.severity,
+            "Message": observation.message,
+        }
+        for observation in copilot_result.observations
+    ]
+
+    st.dataframe(rows, use_container_width=True)
+
+
+def display_verification(result) -> None:
+    st.subheader("Result verification")
+
+    if result.verification_result is None:
+        st.info("Result verification was not executed.")
+        return
+
+    verification = result.verification_result
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Status", verification.status)
+    col2.metric("Failed checks", verification.checks_failed)
+    col3.metric("Warnings", verification.checks_warning)
+
+    rows = [
+        {
+            "Check": check.check_name,
+            "Status": check.status,
+            "Message": check.message,
+        }
+        for check in verification.results
+    ]
+
+    st.dataframe(rows, use_container_width=True)
+
+
+def display_auto_copilot_result(copilot_result) -> None:
+    st.header("Auto Copilot Analysis")
+
+    st.success(copilot_result.execution_summary)
+
+    tab_plan, tab_observations, tab_schema, tab_missing, tab_duplicates, tab_types, tab_rules, tab_sql, tab_score, tab_verification, tab_log, tab_report = st.tabs(
+        [
+            "Agent plan",
+            "Observations",
+            "Schema",
+            "Missing values",
+            "Duplicates",
+            "Type validation",
+            "Business rules",
+            "SQL analysis",
+            "BI-readiness",
+            "Verification",
+            "Action log",
+            "Markdown report",
+        ]
+    )
+
+    dq_result = copilot_result.data_quality_result
+
+    with tab_plan:
+        display_agent_plan(copilot_result.planning_result)
+
+    with tab_observations:
+        display_observations(copilot_result)
+
+    with tab_schema:
+        display_schema_summary(dq_result)
+
+    with tab_missing:
+        display_missing_values(dq_result)
+
+    with tab_duplicates:
+        display_duplicates(dq_result)
+
+    with tab_types:
+        display_type_validation(dq_result)
+
+    with tab_rules:
+        display_business_rules(dq_result)
+
+    with tab_sql:
+        display_sql_analysis(dq_result)
+
+    with tab_score:
+        display_bi_readiness_score(dq_result)
+
+    with tab_verification:
+        display_verification(dq_result)
+
+    with tab_log:
+        display_action_log(dq_result)
+
+    with tab_report:
+        st.markdown(copilot_result.markdown_report)
+
+        st.download_button(
+            label="Download Auto Copilot Markdown report",
+            data=copilot_result.markdown_report,
+            file_name=f"{copilot_result.dataset_name}_auto_copilot_report.md",
+            mime="text/markdown",
+        )
+
 def main() -> None:
     st.title("🧪 Agentic Data Quality Copilot")
 
@@ -471,6 +613,48 @@ def main() -> None:
 
     st.divider()
 
+    analysis_mode = st.radio(
+        "Analysis mode",
+        options=[
+            "Auto Copilot mode",
+            "Manual configuration mode",
+        ],
+        horizontal=True,
+    )
+
+    if analysis_mode == "Auto Copilot mode":
+        st.header("Auto Copilot configuration")
+
+        user_goal = st.text_area(
+            "Copilot goal",
+            value="Assess whether this dataset is ready for BI reporting.",
+            help=(
+                "The deterministic copilot will use this goal to create a structured plan. "
+                "In this version, the goal is used for planning context, not LLM reasoning yet."
+            ),
+        )
+
+        run_auto_copilot = st.button(
+            "Run Auto Copilot Analysis",
+            type="primary",
+        )
+
+        if run_auto_copilot:
+            try:
+                with st.spinner("Running Auto Copilot analysis..."):
+                    copilot_result = run_copilot_analysis(
+                        dataframe=dataframe,
+                        dataset_name=dataset_name,
+                        user_goal=user_goal,
+                    )
+
+                display_auto_copilot_result(copilot_result)
+
+            except Exception as error:
+                st.error(f"Auto Copilot analysis failed: {error}")
+
+        return
+    
     st.header("Check configuration")
 
     duplicate_key_columns = st.multiselect(
