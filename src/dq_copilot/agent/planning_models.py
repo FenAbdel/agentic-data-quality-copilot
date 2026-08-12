@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from dq_copilot.models import DataQualityRunConfig
+from dq_copilot.models import DataQualityRunConfig, DataQualityRunResult
 
 
 AgentToolName = Literal[
@@ -45,3 +45,12 @@ class AgentPlanningResult(BaseModel):
     plan: AgentPlan
     run_config: DataQualityRunConfig
     planning_notes: list[str] = Field(default_factory=list)
+
+
+class CopilotAnalysisResult(BaseModel):
+    user_goal: str
+    dataset_name: str
+    planning_result: AgentPlanningResult
+    data_quality_result: DataQualityRunResult
+    markdown_report: str
+    execution_summary: str
