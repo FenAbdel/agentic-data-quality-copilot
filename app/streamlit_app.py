@@ -1,21 +1,68 @@
 from __future__ import annotations
 
-from io import StringIO
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
 from dq_copilot.agent.check_runner import run_data_quality_checks
-from dq_copilot.models import BusinessRuleConfig, DataQualityRunConfig
-from dq_copilot.reporting.markdown_report import generate_markdown_report
-from dq_copilot.models import BusinessRuleConfig, DataQualityRunConfig, SQLAnalysisQuery
 from dq_copilot.agent.copilot import run_copilot_analysis
+from dq_copilot.models import (
+    BusinessRuleConfig,
+    DataQualityRunConfig,
+    SQLAnalysisQuery,
+)
+from dq_copilot.reporting.markdown_report import generate_markdown_report
 
 st.set_page_config(
     page_title="Agentic Data Quality Copilot",
     page_icon="🧪",
     layout="wide",
 )
+
+SAMPLE_DATASET_PATH = Path(__file__).resolve().parent.parent / "data" / "samples" / "customers.csv"
+
+# Emoji badges keep every status/severity/rating scannable at a glance,
+# matching the "traffic light" convention used by tools like Great
+# Expectations Data Docs and Evidently reports.
+STATUS_STYLES: dict[str, tuple[str, str]] = {
+    "passed": ("✅", "Passed"),
+    "completed": ("✅", "Completed"),
+    "strong": ("✅", "Strong"),
+    "excellent": ("✅", "Excellent"),
+    "good": ("✅", "Good"),
+    "acceptable": ("🟡", "Acceptable"),
+    "warning": ("🟡", "Warning"),
+    "needs_attention": ("🟠", "Needs attention"),
+    "weak": ("🟠", "Weak"),
+    "failed": ("🔴", "Failed"),
+    "poor": ("🔴", "Poor"),
+    "critical": ("🔴", "Critical"),
+    "skipped": ("⏭️", "Skipped"),
+    "info": ("ℹ️", "Info"),
+}
+
+SEVERITY_STYLES: dict[str, tuple[str, str]] = {
+    "ok": ("✅", "OK"),
+    "low": ("🟡", "Low"),
+    "medium": ("🟠", "Medium"),
+    "high": ("🔴", "High"),
+}
+
+
+def _badge(value: str, styles: dict[str, tuple[str, str]]) -> str:
+    emoji, label = styles.get(value, ("", value.replace("_", " ").title()))
+    return f"{emoji} {label}".strip()
+
+
+def status_badge(value: str) -> str:
+    """Render a check status as an emoji + label, e.g. '✅ Passed'."""
+    return _badge(value, STATUS_STYLES)
+
+
+def severity_badge(value: str) -> str:
+    """Render a severity level as an emoji + label, e.g. '🔴 High'."""
+    return _badge(value, SEVERITY_STYLES)
 
 
 def load_uploaded_csv(uploaded_file) -> pd.DataFrame:
@@ -38,11 +85,70 @@ def parse_comma_separated_values(raw_value: str) -> list[str]:
     return [value.strip() for value in raw_value.split(",") if value.strip()]
 
 
+def reset_app_state() -> None:
+    """Clear the uploaded file, sample dataset flag, and configured checks."""
+    st.session_state.uploader_key = st.session_state.get("uploader_key", 0) + 1
+    st.session_state.use_sample_dataset = False
+    st.session_state.business_rules = []
+    st.session_state.sql_queries = []
+    st.session_state.pop("dataframe", None)
+    st.session_state.pop("dataset_name", None)
+
+
+def render_sidebar() -> None:
+    with st.sidebar:
+        st.markdown("## 🧪 DQ Copilot")
+        st.caption("Agentic data quality assistant")
+
+        st.divider()
+        st.markdown("**How it works**")
+        st.markdown(
+            "1. Upload a CSV (or try the sample)\n"
+            "2. Pick Auto Copilot or Manual mode\n"
+            "3. Run the checks\n"
+            "4. Review the score and download the report"
+        )
+
+        current_dataframe = st.session_state.get("dataframe")
+        if current_dataframe is not None:
+            st.divider()
+            st.markdown("**Current dataset**")
+            st.write(f"`{st.session_state.get('dataset_name', 'dataset')}`")
+            st.caption(f"{len(current_dataframe):,} rows · {len(current_dataframe.columns)} columns")
+
+            if st.button("🔄 Start over", use_container_width=True):
+                reset_app_state()
+                st.rerun()
+
+        st.divider()
+        st.caption(
+            "The LLM plans and explains — Python and DuckDB calculate and "
+            "verify every result, so nothing here is free text."
+        )
+
+
+def render_empty_state() -> None:
+    st.info("👆 Upload a CSV file above, or click **Try the sample dataset** to explore the app.")
+
+    st.markdown("#### What gets checked")
+    feature_columns = st.columns(4)
+    features = [
+        ("🧬", "Schema & types", "Column dtypes, sample values, and type validation."),
+        ("❓", "Missing values", "Null counts and severity, per column."),
+        ("🧩", "Duplicates", "Full-row or key-based duplicate detection."),
+        ("🎯", "BI-readiness", "A 0-100 score with concrete recommendations."),
+    ]
+    for column, (icon, title, description) in zip(feature_columns, features):
+        with column:
+            st.markdown(f"**{icon} {title}**")
+            st.caption(description)
+
+
 def build_expected_schema_from_ui(dataframe: pd.DataFrame) -> dict[str, str]:
     """
     Build an expected schema from simple Streamlit selectors.
     """
-    st.subheader("Expected schema")
+    st.subheader("🧬 Expected schema")
 
     with st.expander("Configure expected column types", expanded=False):
         st.caption(
@@ -83,11 +189,17 @@ def build_business_rules_from_ui(dataframe: pd.DataFrame) -> list[BusinessRuleCo
     This first UI version supports common rule types only.
     We keep it simple so the app remains understandable.
     """
-    st.subheader("Business rules")
+    if "business_rules" not in st.session_state:
+        st.session_state.business_rules = []
 
-    rules: list[BusinessRuleConfig] = []
+    rule_count = len(st.session_state.business_rules)
+    expander_label = "Configure business rules"
+    if rule_count:
+        expander_label += f" — {rule_count} added"
 
-    with st.expander("Configure business rules", expanded=False):
+    st.subheader("📏 Business rules")
+
+    with st.expander(expander_label, expanded=False):
         st.caption(
             "Add simple business rules. This first version supports not-null, "
             "positive, non-negative, range, and allowed-values checks."
@@ -153,10 +265,7 @@ def build_business_rules_from_ui(dataframe: pd.DataFrame) -> list[BusinessRuleCo
             )
             allowed_values = parse_comma_separated_values(raw_allowed_values)
 
-        add_rule = st.button("Add business rule")
-
-        if "business_rules" not in st.session_state:
-            st.session_state.business_rules = []
+        add_rule = st.button("➕ Add business rule")
 
         if add_rule:
             try:
@@ -177,26 +286,38 @@ def build_business_rules_from_ui(dataframe: pd.DataFrame) -> list[BusinessRuleCo
                 st.error(f"Could not add rule: {error}")
 
         if st.session_state.business_rules:
-            st.write("Configured rules:")
+            st.divider()
+            st.write(f"**{len(st.session_state.business_rules)} rule(s) configured:**")
 
-            for index, rule in enumerate(st.session_state.business_rules, start=1):
-                st.write(
-                    f"{index}. `{rule.rule_name}` — "
-                    f"`{rule.column_name}` / `{rule.rule_type}`"
-                )
-
-            if st.button("Clear business rules"):
-                st.session_state.business_rules = []
-                st.rerun()
+            for index, rule in enumerate(st.session_state.business_rules):
+                rule_col, delete_col = st.columns([6, 1])
+                with rule_col:
+                    st.write(
+                        f"`{rule.rule_name}` — column **{rule.column_name}**, "
+                        f"type `{rule.rule_type}`"
+                    )
+                with delete_col:
+                    if st.button("🗑️", key=f"delete_rule_{index}", help="Remove this rule"):
+                        st.session_state.business_rules.pop(index)
+                        st.rerun()
 
         rules = st.session_state.business_rules
 
     return rules
 
-def build_sql_queries_from_ui() -> list[SQLAnalysisQuery]:
-    st.subheader("DuckDB SQL analysis")
 
-    with st.expander("Configure SQL queries", expanded=False):
+def build_sql_queries_from_ui() -> list[SQLAnalysisQuery]:
+    if "sql_queries" not in st.session_state:
+        st.session_state.sql_queries = []
+
+    query_count = len(st.session_state.sql_queries)
+    expander_label = "Configure SQL queries"
+    if query_count:
+        expander_label += f" — {query_count} added"
+
+    st.subheader("🗄️ DuckDB SQL analysis")
+
+    with st.expander(expander_label, expanded=False):
         st.caption(
             "Write read-only DuckDB SQL queries against the uploaded dataset. "
             "Use the table name `dataset`."
@@ -220,10 +341,7 @@ def build_sql_queries_from_ui() -> list[SQLAnalysisQuery]:
             key="sql_query_text",
         )
 
-        if "sql_queries" not in st.session_state:
-            st.session_state.sql_queries = []
-
-        if st.button("Add SQL query"):
+        if st.button("➕ Add SQL query"):
             try:
                 query = SQLAnalysisQuery(
                     query_name=query_name,
@@ -235,19 +353,23 @@ def build_sql_queries_from_ui() -> list[SQLAnalysisQuery]:
                 st.error(f"Could not add SQL query: {error}")
 
         if st.session_state.sql_queries:
-            st.write("Configured SQL queries:")
+            st.divider()
+            st.write(f"**{len(st.session_state.sql_queries)} quer(y/ies) configured:**")
 
-            for index, query in enumerate(st.session_state.sql_queries, start=1):
-                st.write(f"{index}. `{query.query_name}`")
-
-            if st.button("Clear SQL queries"):
-                st.session_state.sql_queries = []
-                st.rerun()
+            for index, query in enumerate(st.session_state.sql_queries):
+                query_col, delete_col = st.columns([6, 1])
+                with query_col:
+                    st.write(f"`{query.query_name}`")
+                with delete_col:
+                    if st.button("🗑️", key=f"delete_query_{index}", help="Remove this query"):
+                        st.session_state.sql_queries.pop(index)
+                        st.rerun()
 
         return st.session_state.sql_queries
-    
+
+
 def display_schema_summary(result) -> None:
-    st.subheader("Schema summary")
+    st.subheader("🧬 Schema summary")
 
     schema_rows = [
         {
@@ -263,13 +385,14 @@ def display_schema_summary(result) -> None:
 
     st.dataframe(schema_rows, use_container_width=True)
 
+
 def display_missing_values(result) -> None:
-    st.subheader("Missing values")
+    st.subheader("❓ Missing values")
 
     missing = result.missing_values
 
     col1, col2, col3 = st.columns(3)
-    col1.metric("Status", missing.status)
+    col1.metric("Status", status_badge(missing.status))
     col2.metric("Total missing values", missing.total_missing_values)
     col3.metric("Columns affected", missing.columns_with_missing_values)
 
@@ -278,7 +401,7 @@ def display_missing_values(result) -> None:
             "Column": column.column_name,
             "Missing count": column.null_count,
             "Missing %": column.null_percentage,
-            "Severity": column.severity,
+            "Severity": severity_badge(column.severity),
         }
         for column in missing.results
     ]
@@ -287,12 +410,12 @@ def display_missing_values(result) -> None:
 
 
 def display_duplicates(result) -> None:
-    st.subheader("Duplicates")
+    st.subheader("🧩 Duplicates")
 
     duplicates = result.duplicates
 
     col1, col2, col3 = st.columns(3)
-    col1.metric("Status", duplicates.status)
+    col1.metric("Status", status_badge(duplicates.status))
     col2.metric("Duplicated rows", duplicates.duplicate_row_count)
     col3.metric("Duplicate %", duplicates.duplicate_percentage)
 
@@ -312,7 +435,7 @@ def display_duplicates(result) -> None:
 
 
 def display_type_validation(result) -> None:
-    st.subheader("Type validation")
+    st.subheader("🔡 Type validation")
 
     if result.type_validation is None:
         st.info("Type validation was skipped because no expected schema was provided.")
@@ -321,7 +444,7 @@ def display_type_validation(result) -> None:
     type_validation = result.type_validation
 
     col1, col2, col3 = st.columns(3)
-    col1.metric("Status", type_validation.status)
+    col1.metric("Status", status_badge(type_validation.status))
     col2.metric("Invalid values", type_validation.total_invalid_values)
     col3.metric("Columns affected", type_validation.columns_with_invalid_values)
 
@@ -332,7 +455,7 @@ def display_type_validation(result) -> None:
             "Pandas dtype": column.pandas_dtype,
             "Invalid count": column.invalid_count,
             "Invalid %": column.invalid_percentage,
-            "Severity": column.severity,
+            "Severity": severity_badge(column.severity),
         }
         for column in type_validation.results
     ]
@@ -341,7 +464,7 @@ def display_type_validation(result) -> None:
 
 
 def display_business_rules(result) -> None:
-    st.subheader("Business rules")
+    st.subheader("📏 Business rules")
 
     if result.business_rules is None:
         st.info("Business rules were skipped because no rules were configured.")
@@ -350,7 +473,7 @@ def display_business_rules(result) -> None:
     business_rules = result.business_rules
 
     col1, col2, col3 = st.columns(3)
-    col1.metric("Status", business_rules.status)
+    col1.metric("Status", status_badge(business_rules.status))
     col2.metric("Total violations", business_rules.total_violations)
     col3.metric("Rules with violations", business_rules.rules_with_violations)
 
@@ -359,10 +482,10 @@ def display_business_rules(result) -> None:
             "Rule": rule.rule_name,
             "Column": rule.column_name,
             "Type": rule.rule_type,
-            "Status": rule.status,
+            "Status": status_badge(rule.status),
             "Violations": rule.violation_count,
             "Violation %": rule.violation_percentage,
-            "Severity": rule.severity,
+            "Severity": severity_badge(rule.severity),
         }
         for rule in business_rules.results
     ]
@@ -371,12 +494,12 @@ def display_business_rules(result) -> None:
 
 
 def display_action_log(result) -> None:
-    st.subheader("Action log")
+    st.subheader("🧾 Action log")
 
     rows = [
         {
             "Step": log.step_name,
-            "Status": log.status,
+            "Status": status_badge(log.status),
             "Message": log.message,
         }
         for log in result.action_log
@@ -384,8 +507,9 @@ def display_action_log(result) -> None:
 
     st.dataframe(rows, use_container_width=True)
 
+
 def display_bi_readiness_score(result) -> None:
-    st.subheader("BI-readiness score")
+    st.subheader("🎯 BI-readiness score")
 
     if result.bi_readiness_score is None:
         st.info("BI-readiness score was not computed.")
@@ -395,7 +519,7 @@ def display_bi_readiness_score(result) -> None:
 
     col1, col2 = st.columns(2)
     col1.metric("BI-readiness score", f"{score.overall_score}/{score.max_score}")
-    col2.metric("Rating", score.rating)
+    col2.metric("Rating", status_badge(score.rating))
 
     st.write(score.summary)
 
@@ -403,7 +527,7 @@ def display_bi_readiness_score(result) -> None:
         {
             "Component": component.component_name,
             "Score": f"{component.score}/{component.max_score}",
-            "Status": component.status,
+            "Status": status_badge(component.status),
             "Explanation": component.explanation,
         }
         for component in score.breakdown
@@ -415,8 +539,9 @@ def display_bi_readiness_score(result) -> None:
     for recommendation in score.recommendations:
         st.write(f"- {recommendation}")
 
+
 def display_sql_analysis(result) -> None:
-    st.subheader("DuckDB SQL analysis")
+    st.subheader("🗄️ DuckDB SQL analysis")
 
     if result.sql_analysis is None:
         st.info("DuckDB SQL analysis was skipped because no SQL queries were configured.")
@@ -425,7 +550,7 @@ def display_sql_analysis(result) -> None:
     sql_analysis = result.sql_analysis
 
     col1, col2 = st.columns(2)
-    col1.metric("Status", sql_analysis.status)
+    col1.metric("Status", status_badge(sql_analysis.status))
     col2.metric("Queries failed", sql_analysis.queries_failed)
 
     for query_result in sql_analysis.results:
@@ -438,9 +563,10 @@ def display_sql_analysis(result) -> None:
 
         st.write(f"Rows returned: `{query_result.row_count}`")
         st.dataframe(query_result.rows, use_container_width=True)
-        
+
+
 def display_agent_plan(planning_result) -> None:
-    st.subheader("Agent plan")
+    st.subheader("🧭 Agent plan")
 
     st.write(planning_result.plan.planning_summary)
 
@@ -472,13 +598,14 @@ def display_agent_plan(planning_result) -> None:
         for risk in planning_result.plan.risks:
             st.write(f"- {risk}")
 
+
 def display_observations(copilot_result) -> None:
-    st.subheader("Copilot observations")
+    st.subheader("🔎 Copilot observations")
 
     rows = [
         {
             "Source": observation.source,
-            "Severity": observation.severity,
+            "Severity": status_badge(observation.severity),
             "Message": observation.message,
         }
         for observation in copilot_result.observations
@@ -488,7 +615,7 @@ def display_observations(copilot_result) -> None:
 
 
 def display_verification(result) -> None:
-    st.subheader("Result verification")
+    st.subheader("✅ Result verification")
 
     if result.verification_result is None:
         st.info("Result verification was not executed.")
@@ -497,14 +624,14 @@ def display_verification(result) -> None:
     verification = result.verification_result
 
     col1, col2, col3 = st.columns(3)
-    col1.metric("Status", verification.status)
+    col1.metric("Status", status_badge(verification.status))
     col2.metric("Failed checks", verification.checks_failed)
     col3.metric("Warnings", verification.checks_warning)
 
     rows = [
         {
             "Check": check.check_name,
-            "Status": check.status,
+            "Status": status_badge(check.status),
             "Message": check.message,
         }
         for check in verification.results
@@ -513,29 +640,87 @@ def display_verification(result) -> None:
     st.dataframe(rows, use_container_width=True)
 
 
+def render_checks_at_a_glance(result) -> None:
+    """A one-row summary of every check's status, shown before the tabs."""
+    checks = [
+        ("❓ Missing values", result.missing_values.status if result.missing_values else None),
+        ("🧩 Duplicates", result.duplicates.status if result.duplicates else None),
+        ("🔡 Types", result.type_validation.status if result.type_validation else None),
+        ("📏 Rules", result.business_rules.status if result.business_rules else None),
+        ("🗄️ SQL", result.sql_analysis.status if result.sql_analysis else None),
+    ]
+    checks = [(name, status) for name, status in checks if status is not None]
+
+    if not checks:
+        return
+
+    columns = st.columns(len(checks))
+    for column, (name, status) in zip(columns, checks):
+        column.metric(name, status_badge(status))
+
+
+def render_score_overview(score) -> None:
+    """A headline BI-readiness card shown above the detail tabs."""
+    if score is None:
+        return
+
+    with st.container(border=True):
+        left, right = st.columns([1, 2])
+
+        with left:
+            st.metric("BI-readiness score", f"{score.overall_score} / {score.max_score}")
+            st.markdown(f"**{status_badge(score.rating)}**")
+
+        with right:
+            fraction = score.overall_score / score.max_score if score.max_score else 0
+            st.progress(min(max(fraction, 0.0), 1.0))
+            st.caption(score.summary)
+
+        if score.recommendations:
+            st.markdown("**Top recommendations:**")
+            for recommendation in score.recommendations[:3]:
+                st.write(f"- {recommendation}")
+
+
 def display_auto_copilot_result(copilot_result) -> None:
-    st.header("Auto Copilot Analysis")
+    st.header("🤖 Auto Copilot analysis")
 
     st.success(copilot_result.execution_summary)
 
-    tab_plan, tab_observations, tab_schema, tab_missing, tab_duplicates, tab_types, tab_rules, tab_sql, tab_score, tab_verification, tab_log, tab_report = st.tabs(
+    dq_result = copilot_result.data_quality_result
+
+    render_score_overview(dq_result.bi_readiness_score)
+    render_checks_at_a_glance(dq_result)
+
+    (
+        tab_plan,
+        tab_observations,
+        tab_schema,
+        tab_missing,
+        tab_duplicates,
+        tab_types,
+        tab_rules,
+        tab_sql,
+        tab_score,
+        tab_verification,
+        tab_log,
+        tab_report,
+    ) = st.tabs(
         [
-            "Agent plan",
-            "Observations",
-            "Schema",
-            "Missing values",
-            "Duplicates",
-            "Type validation",
-            "Business rules",
-            "SQL analysis",
-            "BI-readiness",
-            "Verification",
-            "Action log",
-            "Markdown report",
+            "🧭 Agent plan",
+            "🔎 Observations",
+            "🧬 Schema",
+            "❓ Missing values",
+            "🧩 Duplicates",
+            "🔡 Type validation",
+            "📏 Business rules",
+            "🗄️ SQL analysis",
+            "🎯 BI-readiness",
+            "✅ Verification",
+            "🧾 Action log",
+            "📄 Markdown report",
         ]
     )
-
-    dq_result = copilot_result.data_quality_result
 
     with tab_plan:
         display_agent_plan(copilot_result.planning_result)
@@ -574,56 +759,98 @@ def display_auto_copilot_result(copilot_result) -> None:
         st.markdown(copilot_result.markdown_report)
 
         st.download_button(
-            label="Download Auto Copilot Markdown report",
+            label="⬇️ Download Auto Copilot Markdown report",
             data=copilot_result.markdown_report,
             file_name=f"{copilot_result.dataset_name}_auto_copilot_report.md",
             mime="text/markdown",
         )
 
-def main() -> None:
-    st.title("🧪 Agentic Data Quality Copilot")
 
+def main() -> None:
+    render_sidebar()
+
+    st.title("🧪 Agentic Data Quality Copilot")
     st.write(
         "Upload a CSV dataset, configure optional checks, and generate a data "
         "quality report using deterministic Python tools."
     )
 
-    uploaded_file = st.file_uploader(
-        "Upload a CSV file",
-        type=["csv"],
-    )
+    if "uploader_key" not in st.session_state:
+        st.session_state.uploader_key = 0
+    if "use_sample_dataset" not in st.session_state:
+        st.session_state.use_sample_dataset = False
 
-    if uploaded_file is None:
-        st.info("Upload a CSV file to start.")
+    upload_col, sample_col = st.columns([3, 1])
+
+    with upload_col:
+        uploaded_file = st.file_uploader(
+            "Upload a CSV file",
+            type=["csv"],
+            key=f"uploader_{st.session_state.uploader_key}",
+        )
+
+    with sample_col:
+        st.write("")
+        st.write("")
+        if st.button("✨ Try the sample dataset", use_container_width=True):
+            st.session_state.use_sample_dataset = True
+            st.rerun()
+
+    if uploaded_file is not None:
+        st.session_state.use_sample_dataset = False
+
+    if uploaded_file is None and not st.session_state.use_sample_dataset:
+        render_empty_state()
         return
 
     try:
-        dataframe = load_uploaded_csv(uploaded_file)
+        if st.session_state.use_sample_dataset:
+            dataset_name = SAMPLE_DATASET_PATH.name
+            dataframe = pd.read_csv(SAMPLE_DATASET_PATH)
+        else:
+            dataset_name = uploaded_file.name
+            dataframe = load_uploaded_csv(uploaded_file)
     except Exception as error:
         st.error(f"Could not read CSV file: {error}")
         return
 
-    dataset_name = uploaded_file.name
+    st.session_state.dataframe = dataframe
+    st.session_state.dataset_name = dataset_name
 
     st.success(f"Loaded `{dataset_name}` successfully.")
 
-    st.subheader("Dataset preview")
-    st.write(f"Rows: `{len(dataframe)}` | Columns: `{len(dataframe.columns)}`")
-    st.dataframe(dataframe.head(20), use_container_width=True)
+    with st.container(border=True):
+        st.subheader("Dataset preview")
+
+        stat_col1, stat_col2, stat_col3 = st.columns(3)
+        stat_col1.metric("Rows", f"{len(dataframe):,}")
+        stat_col2.metric("Columns", len(dataframe.columns))
+        stat_col3.metric(
+            "Memory",
+            f"{dataframe.memory_usage(deep=True).sum() / 1024:.1f} KB",
+        )
+
+        st.dataframe(dataframe.head(20), use_container_width=True)
 
     st.divider()
 
+    st.markdown("### Choose analysis mode")
     analysis_mode = st.radio(
         "Analysis mode",
         options=[
             "Auto Copilot mode",
             "Manual configuration mode",
         ],
+        captions=[
+            "Recommended — the copilot plans and runs a full check suite for you.",
+            "Pick exactly which checks, rules, and SQL queries to run.",
+        ],
         horizontal=True,
+        label_visibility="collapsed",
     )
 
     if analysis_mode == "Auto Copilot mode":
-        st.header("Auto Copilot configuration")
+        st.header("🤖 Auto Copilot configuration")
 
         user_goal = st.text_area(
             "Copilot goal",
@@ -635,7 +862,7 @@ def main() -> None:
         )
 
         run_auto_copilot = st.button(
-            "Run Auto Copilot Analysis",
+            "▶️ Run Auto Copilot Analysis",
             type="primary",
         )
 
@@ -654,8 +881,8 @@ def main() -> None:
                 st.error(f"Auto Copilot analysis failed: {error}")
 
         return
-    
-    st.header("Check configuration")
+
+    st.header("⚙️ Check configuration")
 
     duplicate_key_columns = st.multiselect(
         "Duplicate key columns",
@@ -671,7 +898,7 @@ def main() -> None:
     sql_queries = build_sql_queries_from_ui()
     st.divider()
 
-    run_checks = st.button("Run data quality checks", type="primary")
+    run_checks = st.button("▶️ Run data quality checks", type="primary")
 
     if not run_checks:
         return
@@ -694,24 +921,32 @@ def main() -> None:
 
     report = generate_markdown_report(result)
 
-    st.header("Data quality results")
+    st.header("📊 Data quality results")
 
-    overview_col1, overview_col2, overview_col3 = st.columns(3)
-    overview_col1.metric("Rows", result.schema_profile.row_count)
-    overview_col2.metric("Columns", result.schema_profile.column_count)
-    overview_col3.metric("Missing values", result.missing_values.total_missing_values)
+    render_score_overview(result.bi_readiness_score)
+    render_checks_at_a_glance(result)
 
-    tab_schema, tab_missing, tab_duplicates, tab_types, tab_rules, tab_sql, tab_score, tab_log, tab_report = st.tabs(
+    (
+        tab_schema,
+        tab_missing,
+        tab_duplicates,
+        tab_types,
+        tab_rules,
+        tab_sql,
+        tab_score,
+        tab_log,
+        tab_report,
+    ) = st.tabs(
         [
-            "Schema",
-            "Missing values",
-            "Duplicates",
-            "Type validation",
-            "Business rules",
-            "SQL analysis",
-            "BI-readiness",
-            "Action log",
-            "Markdown report",
+            "🧬 Schema",
+            "❓ Missing values",
+            "🧩 Duplicates",
+            "🔡 Type validation",
+            "📏 Business rules",
+            "🗄️ SQL analysis",
+            "🎯 BI-readiness",
+            "🧾 Action log",
+            "📄 Markdown report",
         ]
     )
 
@@ -735,13 +970,15 @@ def main() -> None:
 
     with tab_log:
         display_action_log(result)
+
     with tab_sql:
         display_sql_analysis(result)
+
     with tab_report:
         st.markdown(report)
 
         st.download_button(
-            label="Download Markdown report",
+            label="⬇️ Download Markdown report",
             data=report,
             file_name=f"{dataset_name}_quality_report.md",
             mime="text/markdown",

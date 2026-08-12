@@ -1,0 +1,11 @@
+customer_id,customer_name,email,age,signup_date,country,amount,is_active
+1,Amina,amina@example.com,29,2024-01-15,France,120.5,true
+2,Karim,karim@example.com,34,2024-02-20,Morocco,250,yes
+3,Sarah,,41,2024-03-05,France,75.25,true
+4,Youssef,youssef@example.com,,2024-03-18,Morocco,180,false
+5,Lina,lina@example.com,25,2024-04-01,Spain,90,true
+5,Lina Duplicate,lina.duplicate@example.com,25,2024-04-01,Spain,90,true
+6,Nora,nora@example.com,unknown,2024-05-12,France,-20,maybe
+7,Omar,omar@example.com,130,2030-01-01,Unknown,300,true
+8,Imane,imane@example.com,31,not-a-date,Morocco,N/A,false
+,No ID,noid@example.com,45,2024-06-01,France,110,true
