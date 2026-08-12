@@ -13,4 +13,4 @@ reports/*.xlsx
 
 .DS_Store
 
-agentic_data_quality_copilot.egg-info
+agentic_data_quality_copilot.egg-info/
